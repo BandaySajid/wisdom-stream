@@ -16,6 +16,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.set('views', views_path);
 app.set('view engine', 'ejs');
+app.use(express.static(path.join(__dirname, '../', 'static')));
 
 const rooms = new Map();
 

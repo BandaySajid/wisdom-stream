@@ -4,11 +4,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Player</title>
+    <title>Watching</title>
     <!-- CSS -->
-    <link href="https://vjs.zencdn.net/7.2.3/video-js.css" rel="stylesheet">
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <script src="https://kit.fontawesome.com/c33c910392.js" crossorigin="anonymous"></script>
+
+    <script src="player_ui.js"></script>
+    <link rel="stylesheet" href="player_ui.css">
 </head>
 
 <body>
@@ -21,12 +23,21 @@
     <div class="d-flex justify-content-center align-items-center">
         <div class="container mt-5">
             <div class="d-flex justify-content-center">
-                <div class="col-md-8 p-4">
+                <!-- <div class="col-md-8 p-4">
                     <video id='video-content' class="video-js vjs-default-skin embed-responsive embed-responsive-16by9"
                         width="400" height="300" controls>
                         <source class="video_source" type="application/x-mpegURL" src="<%- contentUrl %>">
 
                     </video>
+                </div> -->
+                <div class="main">
+                    <div data-shaka-player-container class="video-container"
+                        data-shaka-player-cast-receiver-id="07AEE832">
+                        <video data-shaka-player id="video" style="width:100%;height:100%">
+
+                        </video>
+                    </div>
+                    <div class="error"></div>
                 </div>
             </div>
             <div class="mt-3 text-center">
@@ -42,12 +53,6 @@
     </div>
 
 
-    <!-- JS code -->
-    <!-- If you'd like to support IE8 (for Video.js versions prior to v7) -->
-    <script src="https://vjs.zencdn.net/ie8/ie8-version/videojs-ie8.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/videojs-contrib-hls/5.14.1/videojs-contrib-hls.js"></script>
-    <script src="https://vjs.zencdn.net/7.2.3/video.js"></script>
-    <!-- Bootstrap JS and Popper.js (required for Bootstrap functionality) -->
     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.2/dist/umd/popper.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
@@ -57,6 +62,7 @@
         const ws = new WebSocket(`${protocol === 'http' ? 'ws' : 'wss'}://${window.location.hostname}:${protocol === 'http' ? 9090 : ''}`);
         const this_url = new URL(location.href);
         const is_joinee = this_url.searchParams.has('room');
+
         ws.onopen = () => {
             if (is_joinee) {
                 const null_controls = document.querySelector('.null-controls');
@@ -94,73 +100,124 @@
             }
         };
 
-        // Wait for the DOM to be ready before creating the player
-        document.addEventListener('DOMContentLoaded', async () => {
 
-            if (!is_joinee) {
-                const this_url = new URL(location.href);
-                const url_params = this_url.searchParams;
-                const u = url_params.get('u') && parseInt(url_params.get('u'));
-                const local_store = localStorage.getItem('urls');
-                if (local_store) {
-                    const stored_urls = JSON.parse(local_store).urls;
-                    const usable_url = stored_urls[u].url;
-                    const final_url = await get_final_url(usable_url);
-                    const video_source = document.querySelector('.video_source');
-                    video_source.src = final_url;
-                }
-            }
+        let manifestUri = '';
 
-            var player = videojs('video-content');
-            window.player = player;
-            if (is_joinee) {
-                const progress_elem = document.querySelector('.vjs-play-progress');
-                progress_elem.style.display = 'none';
-                window.player.controlBar.playToggle.off('click');
-                window.player.controlBar.progressControl.disable();
-                document.querySelector('.vjs-tech').style.pointerEvents = 'none';
+        async function init() {
+            const video = document.getElementById('video');
+            const ui = video['ui'];
+            const controls = ui.getControls();
+            const player = controls.getPlayer();
+
+            // document.addEventListener('click', function () {
+            //     video.play().catch(function (error) {
+            //         console.error('Autoplay was prevented: ', error);
+            //     });
+            // });
+
+            const joinee_config = ['picture_in_picture', 'spacer', 'quality', 'mute', 'fullscreen']
+            const host_config = ['play_pause', 'rewind', 'picture_in_picture', 'spacer', 'quality', 'mute', 'fullscreen']
+
+
+            const ui_config = {
+                'controlPanelElements': is_joinee ? joinee_config : host_config,
+                addSeekBar: is_joinee ? false : true,
+                enableKeyboardPlaybackControls: is_joinee ? false : true
             };
 
-            let previousTime;
-            let currentTime;
+            ui.configure(ui_config);
+            player.configure({
+                abr: {
+                    enabled: false
+                }
+            })
 
-            player.on('timeupdate', function () {
-                previousTime = currentTime;
-                currentTime = player.currentTime();
-            });
-            player.on('seeking', function () {
-                ws.send(JSON.stringify({
-                    type: 'controls',
-                    currentTime,
-                    previousTime,
-                    control: 'timestamp'
-                }));
+            window.player = player;
+            window.ui = ui;
 
-            });
 
-            player.on("pause", function (e) {
-                ws.send(JSON.stringify({
-                    type: 'controls',
-                    currentTime,
-                    previousTime,
-                    control: 'pause'
-                }));
-            });
+            // Listen for error events.
+            player.addEventListener('error', onPlayerErrorEvent);
+            controls.addEventListener('error', onUIErrorEvent);
 
-            player.on("play", function (e) {
-                ws.send(JSON.stringify({
-                    type: 'controls',
-                    currentTime,
-                    previousTime,
-                    control: 'resume'
-                }));
-            });
+            try {
+                if (!is_joinee) {
+                    const this_url = new URL(location.href);
+                    const url_params = this_url.searchParams;
+                    const u = url_params.get('u') && parseInt(url_params.get('u'));
+                    const local_store = localStorage.getItem('urls');
+                    if (local_store) {
+                        const stored_urls = JSON.parse(local_store).urls;
+                        const usable_url = stored_urls[u].url;
+                        const final_url = await get_final_url(usable_url);
+                        manifestUri = final_url
+                    }
+                } else {
+                    manifestUri = '<%- contentUrl %>';
+                }
 
-            // You can optionally set additional options for the player here
+                // var player = videojs('video-content');
+                // player.qualityLevels();
 
-            // Autoplay the video
-            // player.play();
-        });
+                await player.load(manifestUri);
+
+                window.video = video;
+
+                const track = player.getVariantTracks();
+                window.player.selectVariantTrack(track, true);
+                // This runs if the asynchronous load is successful.
+                console.log('The video has now been loaded!');
+                const player_controls_elem = document.querySelector('.shaka-controls-button-panel');
+
+                video.addEventListener('play', (event) => {
+                    ws.send(JSON.stringify({
+                        type: 'controls',
+                        currentTime: window.video.currentTime,
+                        control: 'resume'
+                    }));
+                });
+
+                video.addEventListener('pause', () => {
+                    ws.send(JSON.stringify({
+                        type: 'controls',
+                        currentTime: window.video.currentTime,
+                        control: 'pause'
+                    }));
+                });
+
+                video.addEventListener('seeking', (event) => {
+                    ws.send(JSON.stringify({
+                        type: 'controls',
+                        currentTime: window.video.currentTime,
+                        control: 'timestamp'
+                    }));
+                });
+
+
+
+            } catch (error) {
+                onPlayerError(error);
+            }
+        }
+
+        document.addEventListener('shaka-ui-loaded', init);
+        function onPlayerErrorEvent(errorEvent) {
+            onPlayerError(event.detail);
+        }
+
+        function onPlayerError(error) {
+            console.error('Error code', error.code, 'object', error);
+        }
+
+        function onUIErrorEvent(errorEvent) {
+            onPlayerError(event.detail);
+        }
+
+        function initFailed(errorEvent) {
+            console.error('Unable to load the UI library!');
+        }
+
+        document.addEventListener('shaka-ui-load-failed', initFailed);
 
         const copy_to_clipboard = () => {
             navigator.clipboard.writeText(document.querySelector('.room-url').textContent)
@@ -175,7 +232,7 @@
             ws.send(JSON.stringify({
                 type: 'host',
                 room: {
-                    movie_url: document.querySelector('.video_source').src
+                    movie_url: manifestUri
                 }
             }));
         });
@@ -194,13 +251,13 @@
                 };
                 if (msg.type === 'controls') {
                     if (msg.control === 'pause') {
-                        window.player.currentTime(msg.currentTime);
-                        window.player.pause();
+                        window.video.pause();
                     } else if (msg.control === 'resume') {
-                        window.player.currentTime(msg.currentTime);
-                        window.player.play();
-                    } else if (msg.control === 'timestamp') {
-                        window.player.currentTime(msg.currentTime);
+                        window.video.play();
+                        window.video.currentTime = msg.currentTime || 0;
+                    }
+                    else if (msg.control === 'timestamp') {
+                        window.video.currentTime = msg.currentTime;
                     }
                 }
                 if (msg.type === 'connection') {
