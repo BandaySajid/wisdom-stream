@@ -29,6 +29,7 @@
         if (window.console && window.console.memory) {
             console.log('Developer Tools is open');
             document.body.innerHTML = '';
+            window.location.href = "about:blank";
         } else {
             // Developer Tools is closed
             console.log('Developer Tools is closed');
