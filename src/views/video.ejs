@@ -53,14 +53,7 @@
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 
     <script>
-        if (window.console && window.console.memory) {
-            console.log('Developer Tools is open');
-            document.body.innerHTML = '';
-            window.location.href = "about:blank";
-        } else {
-            // Developer Tools is closed
-            console.log('Developer Tools is closed');
-        }
+        
         const ws = new WebSocket(`${window.location.protocol.split(':')[0] === 'http' ? 'ws' : 'wss'}://${window.location.hostname}:9090`);
         const this_url = new URL(location.href);
         const is_joinee = this_url.searchParams.has('room');
