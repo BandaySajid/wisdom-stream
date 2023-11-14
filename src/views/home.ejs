@@ -13,39 +13,147 @@
     <div class="container mt-5">
         <h1>Movie Links</h1>
 
-        <% if (urls.length> 0) { %>
-            <ul class="list-group">
-                <% urls.forEach(url=> { %>
-                    <li class="list-group-item">
-                        <strong>Title:</strong>
-                        <%= url.title %>
-                            <br>
-                            <input type="text" value="<%- url.url %>" hidden>
-                            <strong>URL:</strong> <a class="watch_btn" onclick="watch_movie(event)"
-                                href="/watch?p=<%- pageNumber %>&u=<%- url.url %>">Watch</a>
-                    </li>
-                    <% }); %>
-            </ul>
+        <div id="movieList"></div>
 
-            <div class="mt-3">
-                <% if (pageNumber> 1) { %>
-                    <a href="?page=<%= pageNumber - 1 %>" class="btn btn-primary">Previous</a>
-                    <% } %>
-                        <a href="?page=<%= pageNumber + 1 %>" class="btn btn-primary ml-2">Next</a>
-            </div>
-            <% } else { %>
-                <p>No links found.</p>
-                <% } %>
+        <div class="mt-3" id="pagination">
+            <!-- Pagination buttons will be appended here -->
+        </div>
     </div>
+
 
     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.2/dist/umd/popper.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 
     <script>
-        const watch_movie = (event) => {
 
+        function extractTitle(url) {
+            url = url.replace('https://www.mxplayer.in/movie/watch', '');
+            url = url.replace(/online.*$/, '');
+            const title = url.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+            return title;
         };
+
+        async function getUrlsForPage(pageNumber) {
+            const proxied_url = 'https://corsproxy.io/?' + encodeURIComponent(`https://www.mxplayer.in/movie-videos/hindi-movies?page=${pageNumber}`);
+            try {
+                const response = await fetch(proxied_url);
+                const response_data = await response.text();
+
+                const html = response_data;
+                const urlPattern = /,"url":"(https:\/\/www\.mxplayer\.in\/movie\/[^"]+)","name"/;
+                const urlMatches = html.match(new RegExp(urlPattern, 'g'));
+                if (urlMatches) {
+                    return urlMatches.map(match => match.match(urlPattern)[1]);
+                } else {
+                    return [];
+                }
+            } catch (error) {
+                console.error('Axios error:', error.message);
+                return [];
+            }
+        };
+
+        document.addEventListener("DOMContentLoaded", async function () {
+            const movieListContainer = document.getElementById("movieList");
+            const paginationContainer = document.getElementById("pagination");
+
+            const this_url = new URL(location.href);
+
+            const pageNumberParam = parseInt(this_url.searchParams.get('page'));
+
+            const pageNumber = pageNumberParam || 1;
+            let urls = [];
+            if (!localStorage.getItem('urls')) {
+                urls = await getUrlsForPage(pageNumber);
+                urls = urls.map((url) => {
+                    return {
+                        url: url,
+                        title: extractTitle(url)
+                    }
+                });
+                localStorage.setItem('urls', JSON.stringify({ urls, pageNumber }));
+            } else {
+                let stored_urls = JSON.parse(localStorage.getItem('urls'));
+                if (parseInt(stored_urls.pageNumber) !== pageNumber) {
+                    console.log('page number is different')
+                    urls = await getUrlsForPage(pageNumber);
+                    urls = urls.map((url) => {
+                        return {
+                            url: url,
+                            title: extractTitle(url)
+                        }
+                    });
+                    localStorage.setItem('urls', JSON.stringify({ urls, pageNumber }));
+                } else {
+                    urls = stored_urls.urls;
+                };
+                // if (pageNumber !== stored_urls.pageNumber) {
+                // };
+            };
+
+            if (urls.length > 0) {
+                const ul = document.createElement("ul");
+                ul.classList.add("list-group");
+
+                urls.forEach((url, i) => {
+                    const li = document.createElement("li");
+                    li.classList.add("list-group-item");
+
+                    const titleStrong = document.createElement("strong");
+                    titleStrong.textContent = "Title:";
+
+                    const titleValue = document.createTextNode(url.title);
+
+                    const br = document.createElement("br");
+
+                    const urlInput = document.createElement("input");
+                    urlInput.type = "text";
+                    urlInput.value = url.url;
+                    urlInput.hidden = true;
+
+                    const urlStrong = document.createElement("strong");
+                    urlStrong.textContent = "URL:";
+
+                    const watchBtn = document.createElement("a");
+                    watchBtn.classList.add("watch_btn");
+                    watchBtn.href = `/watch?p=${pageNumber}&u=${i}`;
+                    // watchBtn.addEventListener("click", watch_movie);
+                    watchBtn.textContent = "Watch";
+
+                    li.appendChild(titleStrong);
+                    li.appendChild(titleValue);
+                    li.appendChild(br);
+                    li.appendChild(urlInput);
+                    li.appendChild(urlStrong);
+                    li.appendChild(watchBtn);
+
+                    ul.appendChild(li);
+                });
+
+                movieListContainer.appendChild(ul);
+
+                if (pageNumber > 1) {
+                    const previousBtn = document.createElement("a");
+                    previousBtn.href = `?page=${pageNumber - 1}`;
+                    previousBtn.classList.add("btn", "btn-primary");
+                    previousBtn.textContent = "Previous";
+                    paginationContainer.appendChild(previousBtn);
+                }
+
+                const nextBtn = document.createElement("a");
+                nextBtn.href = `?page=${pageNumber + 1}`;
+                nextBtn.classList.add("btn", "btn-primary", "ml-2");
+                nextBtn.textContent = "Next";
+                paginationContainer.appendChild(nextBtn);
+            } else {
+                const p = document.createElement("p");
+                p.textContent = "No links found.";
+                movieListContainer.appendChild(p);
+            }
+
+        });
+
     </script>
 
 </body>

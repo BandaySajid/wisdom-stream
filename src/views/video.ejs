@@ -15,9 +15,9 @@
     <div class="alert alert-success alert-dismissible fade hide" role="alert">
         <strong>Link Copied!</strong> Your link has been copied to clipboard.
         <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-          <span aria-hidden="true">&times;</span>
+            <span aria-hidden="true">&times;</span>
         </button>
-      </div>
+    </div>
     <div class="d-flex justify-content-center align-items-center">
         <div class="container mt-5">
             <div class="d-flex justify-content-center">
@@ -25,13 +25,15 @@
                     <video id='video-content' class="video-js vjs-default-skin embed-responsive embed-responsive-16by9"
                         width="400" height="300" controls>
                         <source class="video_source" type="application/x-mpegURL" src="<%- contentUrl %>">
+
                     </video>
                 </div>
             </div>
             <div class="mt-3 text-center">
                 <i class="fa fa-eye text-success"></i> : <span class="clients_length"></span>
                 <div class="container col-md-8 text-center null-controls">
-                    <p>URL: <a class="room-url"></a> <br> <i class="fa fa-clipboard clip_button" style="cursor: pointer; display: none;" onclick="copy_to_clipboard(event)"></i></p>
+                    <p>URL: <a class="room-url"></a> <br> <i class="fa fa-clipboard clip_button"
+                            style="cursor: pointer; display: none;" onclick="copy_to_clipboard(event)"></i></p>
                     <button id="create-room" class="btn btn-primary mr-2">Create Room</button>
                     <!-- <button id="join-room" class="btn btn-success">Join Room</button> -->
                 </div>
@@ -39,10 +41,6 @@
         </div>
     </div>
 
-
-    <!-- <video id='hls-example' class="video-js vjs-default-skin" width="400" height="300" controls>
-        <source type="application/x-mpegURL" src="<%- contentUrl %>">
-    </video> -->
 
     <!-- JS code -->
     <!-- If you'd like to support IE8 (for Video.js versions prior to v7) -->
@@ -55,7 +53,7 @@
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 
     <script>
-        const ws = new WebSocket('ws://127.0.0.1:9090');
+        const ws = new WebSocket(`${window.location.protocol.split(':')[0] === 'http' ? 'ws' : 'wss'}://${window.location.hostname}:9090`);
         const this_url = new URL(location.href);
         const is_joinee = this_url.searchParams.has('room');
         ws.onopen = () => {
@@ -72,14 +70,54 @@
                 }));
             };
         }
-        // Wait for the DOM to be ready before creating the player
-        document.addEventListener('DOMContentLoaded', function () {
-            var player = videojs('video-content');
-            if(is_joinee){
-                const controller_elem = document.querySelector('.vjs-control-bar');
-                controller_elem.style.display = 'none';
+
+        const get_final_url = async (url) => {
+            const proxied_url = 'https://corsproxy.io/?' + encodeURIComponent(url);
+
+
+            const response = await fetch(proxied_url);
+            const html = await response.text();
+
+
+            // Use regular expressions to extract the contentUrl value
+            const pattern = /"contentUrl":"(https:\/\/[^"]+)"/;
+            const matches = html.match(pattern);
+
+            // Check if the contentUrl is found
+            if (matches && matches[1]) {
+                const contentUrl = matches[1];
+
+                return contentUrl;
+            } else {
+                return null
             }
+        };
+
+        // Wait for the DOM to be ready before creating the player
+        document.addEventListener('DOMContentLoaded', async () => {
+
+            if (!is_joinee) {
+                const this_url = new URL(location.href);
+                const url_params = this_url.searchParams;
+                const u = url_params.get('u') && parseInt(url_params.get('u'));
+                const local_store = localStorage.getItem('urls');
+                if (local_store) {
+                    const stored_urls = JSON.parse(local_store).urls;
+                    const usable_url = stored_urls[u].url;
+                    const final_url = await get_final_url(usable_url);
+                    const video_source = document.querySelector('.video_source');
+                    video_source.src = final_url;
+                }
+            }
+
+            var player = videojs('video-content');
             window.player = player;
+            if (is_joinee) {
+                const progress_elem = document.querySelector('.vjs-play-progress');
+                progress_elem.style.display = 'none';
+                window.player.controlBar.playToggle.off('click');
+                window.player.controlBar.progressControl.disable();
+            };
 
             let previousTime;
             let currentTime;
@@ -121,7 +159,7 @@
             // player.play();
         });
 
-        const copy_to_clipboard = ()=>{
+        const copy_to_clipboard = () => {
             navigator.clipboard.writeText(document.querySelector('.room-url').textContent)
             document.querySelector('.alert').classList.replace('hide', 'show')
         }
@@ -145,7 +183,9 @@
                 if (msg.type === 'url') {
                     const room_url_elem = document.querySelector('.room-url');
                     room_url_elem.textContent = msg.room.url;
-                    
+
+                    host_btn.style.display = 'none';
+
                     const clip_button = document.querySelector('.clip_button');
                     clip_button.style.display = 'block'
                 };
@@ -160,8 +200,11 @@
                         window.player.currentTime(msg.currentTime);
                     }
                 }
-                if(msg.type === 'connection'){
+                if (msg.type === 'connection') {
                     document.querySelector('.clients_length').textContent = msg.clients.length;
+                };
+                if (msg.type === 'closed') {
+                    location.reload();
                 };
             } catch (error) {
                 //invalid json

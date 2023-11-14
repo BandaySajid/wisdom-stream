@@ -42,10 +42,9 @@ async function getUrlsForPage(pageNumber) {
         // Make a GET request using axios
         const response = await axios.get(url);
 
-        
+
         // Extracted HTML content
         const html = response.data;
-        console.log('got response from mx', html);
 
         // Define the regex pattern to match URLs
         const urlPattern = /,"url":"(https:\/\/www\.mxplayer\.in\/movie\/[^"]+)","name"/;
@@ -122,50 +121,22 @@ app.get('/watch', async (req, res) => {
 
     try {
         if (req.query.room) {
-            // Render HTML
             const current_room = rooms.get(req.query.room);
-
+            if (!current_room) {
+                return res.send('<h1>room has been closed or does not exist!</h1>');
+            }
             return res.render('video', {
                 contentUrl: current_room.movie_url
             });
         }
-        // URL of the page to scrape
-        const url_index = req.query.u;
-        const pageNumber = req.query.p;
-
-        const final_url_obj = global_urls[pageNumber][url_index];
-
-        // Make a GET request using axios
-        const response = await axios.get(final_url_obj.url);
-
-        // Extracted HTML content
-        const html = response.data;
-
-        // Use regular expressions to extract the contentUrl value
-        const pattern = /"contentUrl":"(https:\/\/[^"]+)"/;
-        const matches = html.match(pattern);
-
-        // Check if the contentUrl is found
-        if (matches && matches[1]) {
-            const contentUrl = matches[1];
-
-            // Render HTML
-            res.render('video', {
-                contentUrl
-            });
-        } else {
-            res.send('Content URL not found.');
-        }
+        res.render('video', {
+            contentUrl: ''
+        });
     } catch (error) {
-        console.error('Axios error:', error);
-        res.send('Error fetching content.');
+        console.error('internal server error:', error);
+        res.send('Error fetching content');
     }
 });
-
-
-// app.get('/', (req, res) => {
-//     res.sendFile(path.join(__dirname, '../index.html'));
-// });
 
 const server = http.createServer(app);
 
@@ -195,6 +166,10 @@ WSS.on('connection', (socket) => {
                     const clients = {};
 
                     clients[socket.uuid] = socket;
+
+                    if (socket.room) {
+                        rooms.delete(socket.room);
+                    }
 
                     rooms.set(random_room_name, {
                         owner: socket.uuid,
@@ -282,6 +257,13 @@ WSS.on('connection', (socket) => {
             if (socket.room) {
                 const room_data = rooms.get(socket.room);
                 if (room_data.owner === socket.uuid) {
+                    Object.values(room_data.clients).forEach(client => {
+                        if (socket.uuid !== client.uuid) {
+                            client.send(JSON.stringify({
+                                type: 'closed',
+                            }));
+                        }
+                    });
                     rooms.delete(socket.room);
                 } else if (room_data.clients[socket.uuid]) {
                     delete room_data.clients[socket.uuid];
