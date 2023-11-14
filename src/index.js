@@ -42,8 +42,10 @@ async function getUrlsForPage(pageNumber) {
         // Make a GET request using axios
         const response = await axios.get(url);
 
+        
         // Extracted HTML content
         const html = response.data;
+        console.log('got response from mx', html);
 
         // Define the regex pattern to match URLs
         const urlPattern = /,"url":"(https:\/\/www\.mxplayer\.in\/movie\/[^"]+)","name"/;
