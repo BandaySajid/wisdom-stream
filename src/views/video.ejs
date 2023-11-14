@@ -118,6 +118,7 @@
                 progress_elem.style.display = 'none';
                 window.player.controlBar.playToggle.off('click');
                 window.player.controlBar.progressControl.disable();
+                document.querySelector('.vjs-tech').style.pointerEvents = 'none';
             };
 
             let previousTime;
@@ -134,6 +135,7 @@
                     previousTime,
                     control: 'timestamp'
                 }));
+
             });
 
             player.on("pause", function (e) {

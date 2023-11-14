@@ -153,9 +153,8 @@ message format : JSON data;
 
 */
 
-WSS.on('connection', (socket) => {
+WSS.on('connection', (socket, req) => {
     socket.uuid = crypto.randomUUID();
-
 
     socket.on('message', (msg) => {
         try {
@@ -177,7 +176,7 @@ WSS.on('connection', (socket) => {
                         movie_url: message.room.movie_url
                     });
 
-                    const constructed_url = 'https://127.0.0.1:9090/watch?room=' + random_room_name;
+                    const constructed_url = 'https://'+ req.headers.host +'/watch?room=' + random_room_name;
 
                     socket.room = random_room_name;
                     Object.values((rooms.get(socket.room)).clients).forEach(client => {
