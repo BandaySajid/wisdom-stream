@@ -26,7 +26,14 @@
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 
     <script>
-
+        if (window.console && window.console.memory) {
+            console.log('Developer Tools is open');
+            document.body.innerHTML = '';
+        } else {
+            // Developer Tools is closed
+            console.log('Developer Tools is closed');
+        }
+        
         function extractTitle(url) {
             url = url.replace('https://www.mxplayer.in/movie/watch', '');
             url = url.replace(/online.*$/, '');
